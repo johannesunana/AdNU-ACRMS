@@ -27,7 +27,7 @@ ACS712  ACS(A0, 5.0, 1023, 100);    // ACS712 20A uses 100 mV per A
 ADXL345_WE myAcc = ADXL345_WE(ADXL345_I2CADDR);   // ADCL345 inser I2C address
 
 // Variables for ACS712 current analog data and ADXL345 accelerometer data
-float mA_float, xa_float, ya_float, za_float;
+float mA_float, formFactor_float, xa_float, ya_float, za_float;
 
 // MySQL INSERT INTO instruction
 char query1[128];
@@ -54,13 +54,15 @@ void setup() {
   if (!myAcc.init()) {    // Initialize accelerometwr with default register values
     Serial.println("ADXL345 not connected!");
   }
-
+  // Calibraton factors
+  myAcc.setCorrFactors(-254.0, 274.0, -271.0, 256.0, -258.0, 250.0);
+  
   // Data rate parameters
   myAcc.setDataRate(ADXL345_DATA_RATE_50);    // 50 Hz data rate
 
   // Range paremeters
   myAcc.setRange(ADXL345_RANGE_4G);
-
+  
   myAcc.setLowPower(false);   // Low power mode, for output data rate between 12.5 and 400 Hz
   
   // WiFi
@@ -95,8 +97,7 @@ void runInsert() {
     sprintf(query2, INSERT_ACC, database, table2, device_id, xa_char, ya_char, za_char);
     MYSQL_DISPLAY1("Query1", query1);
     MYSQL_DISPLAY1("Query2", query2);
- 
-    
+
     // Execute the query
     // KH, check if valid before fetching
     if ( !query_mem.execute(query1) ) {
@@ -105,16 +106,13 @@ void runInsert() {
     else {
       MYSQL_DISPLAY("Query 1: Data Inserted.");
     }
-    
     if ( !query_mem.execute(query2) ) {
       MYSQL_DISPLAY("Query 2: Insert error");
     }
-
     else {
       MYSQL_DISPLAY("Query 2: Data Inserted.");
     }
   }
-  
   else {
     MYSQL_DISPLAY("Server disconnected can't insert.");
   }
@@ -123,9 +121,11 @@ void runInsert() {
 void loop() {
   MYSQL_DISPLAY("Connecting to server");
   mA_float = ACS.mA_AC();
+  formFactor_float = ACS.getFormFactor();
   xyzFloat raw = myAcc.getRawValues();    // Returns the raw values from the data registers.
   xyzFloat g = myAcc.getGValues();        // Returns the g values. If calibration has been applied,
 
+  // Assign struct values to individual floats
   xa_float = g.x;
   ya_float = g.y;
   za_float = g.z;
@@ -133,25 +133,10 @@ void loop() {
   if (conn.connectNonBlocking(server_addr, server_port, user, password) != RESULT_FAIL) {
     digitalWrite(LED_BUILTIN, LOW);
     MYSQL_DISPLAY("\nConnect success");
-    Serial.print("\nmA: ");
-    Serial.print(mA_float);
-    Serial.print(". Form factor: ");
-    Serial.println(ACS.getFormFactor());
-    
-    Serial.print("Raw-x = ");
-    Serial.print(raw.x);
-    Serial.print("  |  Raw-y = ");
-    Serial.print(raw.y);
-    Serial.print("  |  Raw-z = ");
-    Serial.println(raw.z);
-
-    Serial.print("g-x   = ");
-    Serial.print(g.x);
-    Serial.print("  |  g-y   = ");
-    Serial.print(g.y);
-    Serial.print("  |  g-z   = ");
-    Serial.println(g.z);
-    
+    MYSQL_DISPLAY3("\nmA:", mA_float, ". Form factor: ", formFactor_float);
+    MYSQL_DISPLAY5("\nRaw-x = ", raw.x, "  |  Raw-y = ", raw.y, "  |  Raw-z = ", raw.z)
+    MYSQL_DISPLAY5("g-x   = ", g.x, "  |  g-y   = ", g.y, "  |  g-z   = ", g.z)
+        
     digitalWrite(LED_BUILTIN, HIGH);
     runInsert();
     conn.close();
