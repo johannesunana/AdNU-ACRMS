@@ -15,7 +15,7 @@
 
 // MySQL_MariaDB_Generic
 #define MYSQL_DEBUG_PORT      Serial
-#define _MYSQL_LOGLEVEL_      4
+#define _MYSQL_LOGLEVEL_      1
 
 // ADC pin for current output
 #define VOUT_PIN A0
@@ -23,7 +23,7 @@
 // Initialize libraries
 MySQL_Connection conn((Client *)&client);
 MySQL_Query *query_mem;
-ACS712  ACS(A0, 5.0, 1023, 100);    // ACS712 20A uses 100 mV per A
+ACS712  ACS(A0, 3.3, 1023, 100);    // ACS712 20A uses 100 mV per A
 ADXL345_WE myAcc = ADXL345_WE(ADXL345_I2CADDR);   // ADCL345 inser I2C address
 
 // Variables for ACS712 current analog data and ADXL345 accelerometer data
@@ -54,6 +54,7 @@ void setup() {
   if (!myAcc.init()) {    // Initialize accelerometwr with default register values
     Serial.println("ADXL345 not connected!");
   }
+  
   // Calibraton factors
   myAcc.setCorrFactors(-254.0, 274.0, -271.0, 256.0, -258.0, 250.0);
   
@@ -89,10 +90,10 @@ void runInsert() {
   if (conn.connected()) {
     // Save
     MYSQL_DISPLAY("Start 1");
-    dtostrf(mA_float, 4, 1, mA_char);
-    dtostrf(xa_float, 4, 1, xa_char);
-    dtostrf(ya_float, 4, 1, ya_char);
-    dtostrf(za_float, 4, 1, za_char);
+    dtostrf(mA_float, 4, 2, mA_char);
+    dtostrf(xa_float, 4, 2, xa_char);
+    dtostrf(ya_float, 4, 2, ya_char);
+    dtostrf(za_float, 4, 2, za_char);
     sprintf(query1, INSERT_MA, database, table1, device_id, mA_char);
     sprintf(query2, INSERT_ACC, database, table2, device_id, xa_char, ya_char, za_char);
     MYSQL_DISPLAY1("Query1", query1);
@@ -136,19 +137,19 @@ void loop() {
     MYSQL_DISPLAY3("\nmA:", mA_float, ". Form factor: ", formFactor_float);
     MYSQL_DISPLAY5("\nRaw-x = ", raw.x, "  |  Raw-y = ", raw.y, "  |  Raw-z = ", raw.z)
     MYSQL_DISPLAY5("g-x   = ", g.x, "  |  g-y   = ", g.y, "  |  g-z   = ", g.z)
-        
+    
     digitalWrite(LED_BUILTIN, HIGH);
     runInsert();
     conn.close();
     delay(50);
   }
-
+  
   else {
     digitalWrite(LED_BUILTIN, HIGH);
     MYSQL_DISPLAY("\nConnect failed trying again");
   }
 
   MYSQL_DISPLAY("\nSleeping");
-  delay(3000);         // end of loop
+  delay(500);         // end of loop
 
 }
