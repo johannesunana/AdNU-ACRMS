@@ -302,8 +302,8 @@ DROP TABLE IF EXISTS `adnu_acrms_3`.`data_gas` ;
 CREATE TABLE IF NOT EXISTS `adnu_acrms_3`.`data_gas` (
   `record_id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `device_id` TINYINT UNSIGNED NOT NULL,
-  `vout_reading` DECIMAL(5,2) NULL DEFAULT NULL,
-  `vref_reading` DECIMAL(5,2) NULL DEFAULT NULL,
+  `vout_data` DECIMAL(5,2) NULL DEFAULT NULL,
+  `vref_data` DECIMAL(5,2) NULL DEFAULT NULL,
   `vout_status` VARCHAR(15) NULL DEFAULT NULL,
   `vref_status` VARCHAR(15) NULL DEFAULT NULL,
   `alarm_status` VARCHAR(15) NULL DEFAULT NULL,
@@ -408,15 +408,15 @@ END$$
 DELIMITER ;
 
 -- -----------------------------------------------------
--- procedure add_hmd_reading
+-- procedure add_hmd_data
 -- -----------------------------------------------------
 
 USE `adnu_acrms_3`;
-DROP procedure IF EXISTS `adnu_acrms_3`.`add_hmd_reading`;
+DROP procedure IF EXISTS `adnu_acrms_3`.`add_hmd_data`;
 
 DELIMITER $$
 USE `adnu_acrms_3`$$
-CREATE DEFINER=`root`@`localhost` PROCEDURE `add_hmd_reading`(
+CREATE DEFINER=`root`@`localhost` PROCEDURE `add_hmd_data`(
 	IN `p_device_id` TINYINT,
 	IN `p_hmd_data` DECIMAL(5,2)
 )
@@ -431,15 +431,15 @@ END$$
 DELIMITER ;
 
 -- -----------------------------------------------------
--- procedure add_temp_reading
+-- procedure add_temp_data
 -- -----------------------------------------------------
 
 USE `adnu_acrms_3`;
-DROP procedure IF EXISTS `adnu_acrms_3`.`add_temp_reading`;
+DROP procedure IF EXISTS `adnu_acrms_3`.`add_temp_data`;
 
 DELIMITER $$
 USE `adnu_acrms_3`$$
-CREATE DEFINER=`root`@`localhost` PROCEDURE `add_temp_reading`(
+CREATE DEFINER=`root`@`localhost` PROCEDURE `add_temp_data`(
 	IN `p_device_id` TINYINT,
 	IN `p_temp_reading` DECIMAL(5,2)
 )
@@ -649,28 +649,28 @@ USE `adnu_acrms_3`$$
 CREATE DEFINER=`root`@`localhost` PROCEDURE `add_gas_data`(
 	IN `p_device_id` TINYINT,
 	IN `p_vout_data` DECIMAL(5,2),
-    IN `p_vref_data` DECIMAL(5,2)
+	IN `p_vref_data` DECIMAL(5,2)
 )
     MODIFIES SQL DATA
     DETERMINISTIC
 BEGIN
 	IF (p_vout_reading > 4.95 OR p_vout_reading < 0.05) THEN
-		SET @p_vout_status= 'malfunction';
+		SET @p_vout_status= 1;
 	ELSE
-		SET @p_vout_status= 'normal';
+		SET @p_vout_status= 0;
 	END IF;
 	IF (p_vref_reading > 3.70 OR p_vref_reading < 2.50) THEN
-		SET @p_vref_status = 'malfunction';
+		SET @p_vref_status = 1;
 	ELSE
-		SET @p_vref_status= 'normal';
+		SET @p_vref_status= 0;
 	END IF;
-	IF (@p_vout_status = 'malfunction' OR @p_vref_status = 'malfunction') THEN
-		SET @p_alarm_status= 'malfunction';
+	IF (@p_vout_status = 1 OR @p_vref_status = 1) THEN
+		SET @p_alarm_status= 1;
 	ELSE
 		IF p_vout_reading < p_vref_reading THEN
-			SET @p_alarm_status= 'normal';
+			SET @p_alarm_status= 0;
 		ELSE
-			SET @p_alarm_status= 'alarm';
+			SET @p_alarm_status= 0;
 		END IF;
 	END IF;
 	INSERT INTO data_gas (device_id, vout_reading, vref_reading, vout_status, vref_status, alarm_status)
@@ -681,15 +681,15 @@ END$$
 DELIMITER ;
 
 -- -----------------------------------------------------
--- procedure add_temp_hmd_reading
+-- procedure add_temp_hmd_data
 -- -----------------------------------------------------
 
 USE `adnu_acrms_3`;
-DROP procedure IF EXISTS `adnu_acrms_3`.`add_temp_hmd_reading`;
+DROP procedure IF EXISTS `adnu_acrms_3`.`add_temp_hmd_data`;
 
 DELIMITER $$
 USE `adnu_acrms_3`$$
-CREATE PROCEDURE `add_temp_hmd_reading` (
+CREATE PROCEDURE `add_temp_hmd_data` (
 	IN `p_device_id` TINYINT,
 	IN `p_temp_reading` DECIMAL(5,2),
 	IN `p_hmd_reading` DECIMAL(5,2)
