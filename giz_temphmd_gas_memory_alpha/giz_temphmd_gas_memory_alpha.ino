@@ -3,6 +3,10 @@
 // For use with gizDuino LIN-UNO/gizduino UNO-SE
 // With ESP-12E WiFi shield
 
+// MySQL_MariaDB_Generic
+#define MYSQL_DEBUG_PORT      Serial
+#define _MYSQL_LOGLEVEL_      0
+
 // Libraries and header files
 #include <Wire.h>             // I2C Library
 #include <SHT21.h>            // e-radionicacom/SHT21-Arduino
@@ -16,10 +20,6 @@
 #include <MySQL_Generic_Query_Impl.h>
 #include <MySQL_Generic_Encrypt_Sha1_Impl.h>
 #include <MySQL_Generic_Packet_Impl.h>
-
-// For MySQL Library
-#define MYSQL_DEBUG_PORT      Serial
-#define _MYSQL_LOGLEVEL_      1
 
 // ADC pins for FCM2630 sensor
 #define VOUT_PIN A0
@@ -35,18 +35,23 @@ SHT21 sht;
 // Variables for SHT21 temp/humidity data and FCM2630 analog data
 float temp_float, hmd_float;
 float vout_float, vref_float;
-byte vout_status, vref_status, alarm_status;
 
 // MySQL INSERT INTO instruction
-char query1[86];
-char query2[140];
+#if USING_STORED_PROCEDURE
+  char CALL_TEMPHMD[] = "CALL %s.%s (%d, %s, %s)";
+  char CALL_GAS[] = "CALL %s.%s (%d, %s, %s)";
+#else
+  char INSERT_TEMPHMD[] = "INSERT INTO %s.%s (device_id, temp_data, hmd_data) VALUES (%d, %s, %s)";
+  char INSERT_GAS[] = "INSERT INTO %s.%s (device_id, vout_data, vref_data, vout_status, vref_status, alarm_status) VALUES (%d, %s, %s, %d, %d, %d)";
+  byte vout_status, vref_status, alarm_status;
+#endif
+char query1[55];
+char query2[50];
 char temp_char[5];
 char hmd_char[5];
 char vout_char[5];
 char vref_char[5];
 byte device_id = 1;
-char INSERT_TEMPHMD[] = "INSERT INTO %s.%s (device_id, temp_data, hmd_data) VALUES (%d, %s, %s)";
-char INSERT_GAS[] = "INSERT INTO %s.%s (device_id, vout_data, vref_data, vout_status, vref_status, alarm_status) VALUES (%d, %s, %s, %d, %d, %d)";
 
 void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
@@ -83,8 +88,15 @@ void runInsert() {
     dtostrf(hmd_float, 4, 2, hmd_char);
     dtostrf(vout_float, 4, 2, vout_char);
     dtostrf(vref_float, 4, 2, vref_char);
-    sprintf(query1, INSERT_TEMPHMD, database, table1, device_id, temp_char, hmd_char);
-    sprintf(query2, INSERT_GAS, database, table2, device_id, vout_char, vref_char, vout_status, vref_status, alarm_status);
+    
+    #if USING_STORED_PROCEDURE
+      sprintf(query1, CALL_TEMPHMD, database, proc1, device_id, temp_char, hmd_char);
+      sprintf(query2, CALL_GAS, database, proc2, device_id, vout_char, vref_char);
+    #else
+      sprintf(query1, INSERT_TEMPHMD, database, table1, device_id, temp_char, hmd_char);
+      sprintf(query2, INSERT_GAS, database, table2, device_id, vout_char, vref_char, vout_status, vref_status, alarm_status);
+    #endif
+    
     MYSQL_DISPLAY1("Query1", query1);
     MYSQL_DISPLAY1("Query2", query2);
 
@@ -108,69 +120,27 @@ void runInsert() {
   }
 }
 
-void gasReading(float vout_in, float vref_in) {
-    if ((vout_in > 4.95) || (vout_in < 0.05)) {
-        vout_status = 1;        // malfunction
-    }
-    else {
-        vout_status = 0;        // normal
-    }
-    if ((vref_in > 3.70) || (vref_in < 2.50)) {
-        vref_status = 1;       // malfunction
-    }
-    else {
-        vout_status = 0;      // normal
-    }
-    if ((vref_status == 1) || (vout_status == 1)) {
-        alarm_status = 2;        // malfunction
-    }
-    else {
-        if (vout_in < vref_in) {
-            alarm_status = 1;   // alarm
-        }
-        else {
-            alarm_status = 0;   // normal
-        }
-    }
-}
-
 void loop() {
-
   MYSQL_DISPLAY("Connecting to server");
+  temp_float = sht.getTemperature();
+  hmd_float = sht.getHumidity();
+
+  vout_float = analogRead(VOUT_PIN)/1024;
+  vref_float = analogRead(VREF_PIN)/1024;
+
   if (conn.connect(server_addr, server_port, user, password) != RESULT_FAIL) {
-    delay(500);
     digitalWrite(LED_BUILTIN, HIGH);
     MYSQL_DISPLAY("\nConnect success");
-    temp_float = sht.getTemperature();
-    hmd_float = sht.getHumidity();
-
-    vout_float = analogRead(VOUT_PIN);
-    vref_float = analogRead(VREF_PIN);
-    gasReading(vout_float, vref_float);
-    
-//   Print out the values
-//    Serial.print("\nTemp: ");      // print readings
-//    Serial.print(temp_float);
-//    Serial.print("\tHumidity: ");
-//    Serial.println(hmd_float);
-//
-//    Serial.print("\t\tVout: ");
-//    Serial.print(vOut_float/1024);
-//    Serial.print(smoothedSensorVOutValueAvg);
-//    Serial.print("\tVRef: ");
-//    Serial.println(vRef_float/1024);
-//    Serial.println(smoothedSensorVRefValueAvg);
-    
+//    MYSQL_DISPLAY3("\nTemp: ", temp_float, "\tHumidity: ", hmd_float);
+//    MYSQL_DISPLAY3("Vout: ", vout_float, "\tVRef: ", vref_float);
     runInsert();
-    conn.close();                     // close the connection
-    delay(1000);
+    conn.close();
     digitalWrite(LED_BUILTIN, LOW);
+    delay(50);
   } 
-
   else {
     MYSQL_DISPLAY("\nConnect failed");
-  }
-  
+  }  
   MYSQL_DISPLAY("\nSleeping");
-  delay(5000);         // end of loop
+  delay(1000);         // end of loop
 }
