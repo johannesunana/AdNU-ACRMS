@@ -1,7 +1,11 @@
 // Integrated 20A current sensor and acceleromter
-// Using Smoothed, MySQL_MariaDB_Generic,
+// Using MySQL_MariaDB_Generic
 // ACS712, ADXL345_WE Libraries
 // For use with NodeMCU ESP-12E
+
+// MySQL_MariaDB_Generic
+#define MYSQL_DEBUG_PORT          Serial
+#define _MYSQL_LOGLEVEL_          0
 
 // Libraries and header files
 #include <Wire.h>                 // I2C Library
@@ -13,45 +17,49 @@
 // I2C address of ADXL345
 #define ADXL345_I2CADDR 0x53
 
-// MySQL_MariaDB_Generic
-#define MYSQL_DEBUG_PORT      Serial
-#define _MYSQL_LOGLEVEL_      1
-
 // ADC pin for current output
-#define VOUT_PIN A0
+#define VOUT_PIN                  A0
 
 // Initialize libraries
 MySQL_Connection conn((Client *)&client);
 MySQL_Query *query_mem;
-ACS712  ACS(A0, 3.3, 1023, 100);    // ACS712 20A uses 100 mV per A
+ACS712  ACS(A0, 5.0, 1023, 100);    // ACS712 20A uses 100 mV per A
 ADXL345_WE myAcc = ADXL345_WE(ADXL345_I2CADDR);   // ADCL345 inser I2C address
 
 // Variables for ACS712 current analog data and ADXL345 accelerometer data
-float mA_float, formFactor_float, xa_float, ya_float, za_float;
+float mA_float, formFactor_float;
+float xa_float, ya_float, za_float;
 
 // MySQL INSERT INTO instruction
-char query1[128];
-char query2[128];
+#if USING_STORED_PROCEDURE
+  char CALL_MA[] = "CALL %s.%s (%d, %s)";
+  char CALL_ACC[] = "CALL %s.%s (%d, %s, %s, %s)";
+#else
+  char INSERT_MA[] = "INSERT INTO %s.%s (device_id, amp_data) VALUES (%d, %s)";
+  char INSERT_ACC[] = "INSERT INTO %s.%s (device_id, xa_data, ya_data, za_data) VALUES (%d, %s, %s, %s)";
+#endif
+
+char query1[100];
+char query2[100];
 char mA_char[10];
 char xa_char[10];
 char ya_char[10];
 char za_char[10];
 byte device_id = 1;
-char INSERT_MA[] = "INSERT INTO %s.%s (device_id, amp_data) VALUES (%d, %s)";
-char INSERT_ACC[] = "INSERT INTO %s.%s (device_id, xa_data, ya_data, za_data) VALUES (%d, %s, %s, %s)";
 
 void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
   digitalWrite(LED_BUILTIN, HIGH);
+  
   Serial.begin(115200);
   while (!Serial);
   Wire.begin();             // Initialize I2C
   
-  MYSQL_DISPLAY1("\nStarting Complex_Insert_WiFi on", ARDUINO_BOARD);
+  MYSQL_DISPLAY1("\nStarting program on", ARDUINO_BOARD);
   MYSQL_DISPLAY(MYSQL_MARIADB_GENERIC_VERSION);
  
   ACS.autoMidPoint();
-  if (!myAcc.init()) {    // Initialize accelerometwr with default register values
+  if (!myAcc.init()) {    // Initialize accelerometer with default register values
     Serial.println("ADXL345 not connected!");
   }
   
@@ -66,10 +74,6 @@ void setup() {
   
   myAcc.setLowPower(false);   // Low power mode, for output data rate between 12.5 and 400 Hz
   
-  // WiFi
-  if (WiFi.status() == WL_NO_SHIELD) {    // check for the presence of the shield
-    while (true);   // don't continue
-  }
   MYSQL_DISPLAY1("Connecting to", ssid);
 
   WiFi.begin(ssid, pass);
@@ -89,13 +93,19 @@ void runInsert() {
 
   if (conn.connected()) {
     // Save
-    MYSQL_DISPLAY("Start 1");
     dtostrf(mA_float, 4, 2, mA_char);
     dtostrf(xa_float, 4, 2, xa_char);
     dtostrf(ya_float, 4, 2, ya_char);
     dtostrf(za_float, 4, 2, za_char);
-    sprintf(query1, INSERT_MA, database, table1, device_id, mA_char);
-    sprintf(query2, INSERT_ACC, database, table2, device_id, xa_char, ya_char, za_char);
+    
+    #if USING_STORED_PROCEDURE
+      sprintf(query1, CALL_MA, database, proc1, device_id, mA_char);
+      sprintf(query2, CALL_ACC, database, proc2, device_id, xa_char, ya_char, za_char);
+    #else
+      sprintf(query1, INSERT_MA, database, table1, device_id, mA_char);
+      sprintf(query2, INSERT_ACC, database, table2, device_id, xa_char, ya_char, za_char);
+    #endif
+                
     MYSQL_DISPLAY1("Query1", query1);
     MYSQL_DISPLAY1("Query2", query2);
 
@@ -121,35 +131,36 @@ void runInsert() {
 
 void loop() {
   MYSQL_DISPLAY("Connecting to server");
-  mA_float = ACS.mA_AC();
-  formFactor_float = ACS.getFormFactor();
-  xyzFloat raw = myAcc.getRawValues();    // Returns the raw values from the data registers.
-  xyzFloat g = myAcc.getGValues();        // Returns the g values. If calibration has been applied,
-
-  // Assign struct values to individual floats
-  xa_float = g.x;
-  ya_float = g.y;
-  za_float = g.z;
-  
+ 
   if (conn.connectNonBlocking(server_addr, server_port, user, password) != RESULT_FAIL) {
     digitalWrite(LED_BUILTIN, LOW);
     MYSQL_DISPLAY("\nConnect success");
+
+    // Obtain sensor data
+    mA_float = ACS.mA_AC();
+    formFactor_float = ACS.getFormFactor();
+    xyzFloat raw = myAcc.getCorrectedRawValues();    // Returns the corrected raw values from the data registers.
+    xyzFloat g = myAcc.getGValues();        // Returns the g values.
+
+    // Assign struct values to individual floats
+    xa_float = g.x;
+    ya_float = g.y;
+    za_float = g.z;
+
     MYSQL_DISPLAY3("\nmA:", mA_float, ". Form factor: ", formFactor_float);
     MYSQL_DISPLAY5("\nRaw-x = ", raw.x, "  |  Raw-y = ", raw.y, "  |  Raw-z = ", raw.z)
     MYSQL_DISPLAY5("g-x   = ", g.x, "  |  g-y   = ", g.y, "  |  g-z   = ", g.z)
     
-    digitalWrite(LED_BUILTIN, HIGH);
     runInsert();
     conn.close();
-    delay(50);
+    digitalWrite(LED_BUILTIN, HIGH);
   }
-  
   else {
     digitalWrite(LED_BUILTIN, HIGH);
     MYSQL_DISPLAY("\nConnect failed trying again");
   }
 
   MYSQL_DISPLAY("\nSleeping");
-  delay(500);         // end of loop
+  delay(100);         // end of loop
 
 }

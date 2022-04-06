@@ -1,7 +1,9 @@
 #ifndef Credentials_h
 #define Credentials_h
 
-IPAddress server_addr(192, 168, 254, 107);
+#define USING_STORED_PROCEDURE    true
+
+IPAddress server_addr(192, 168, 254, 100);
 uint16_t server_port = 3308; 
 
 char ssid[] = "HelloKitty";             // your network SSID (name)
@@ -11,8 +13,13 @@ char user[]         = "arduino";              // MySQL user login username
 char password[]     = "arduino";          // MySQL user login password
 
 char database[] = "adnu_acrms_3";
-char table1[]  = "data_current";
-char table2[]  = "data_accelerometer";
 
+#if USING_STORED_PROCEDURE
+  char proc1[] = "add_amp_data";
+  char proc2[] = "add_acc_data";
+#else
+  char table1[]  = "data_amp";
+  char table2[]  = "data_acc";
+#endif 
 
 #endif    //Credentials_h

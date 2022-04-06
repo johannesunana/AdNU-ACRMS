@@ -3,7 +3,7 @@
 
 #define USING_STORED_PROCEDURE    true
 
-IPAddress server_addr(192, 168, 254, 107);
+IPAddress server_addr(192, 168, 254, 100);
 uint16_t server_port = 3308;
 
 char ssid[] = "HelloKitty";             // your network SSID (name)
