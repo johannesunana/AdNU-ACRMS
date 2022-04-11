@@ -92,12 +92,13 @@ void runInsert() {
   MySQL_Query query_mem = MySQL_Query(&conn);
 
   if (conn.connected()) {
-    // Save
+    // Convert floats to char strings before insert
     dtostrf(mA_float, 4, 2, mA_char);
     dtostrf(xa_float, 4, 2, xa_char);
     dtostrf(ya_float, 4, 2, ya_char);
     dtostrf(za_float, 4, 2, za_char);
-    
+
+    // Insert char strings to placeholders in single query string
     #if USING_STORED_PROCEDURE
       sprintf(query1, CALL_MA, database, proc1, device_id, mA_char);
       sprintf(query2, CALL_ACC, database, proc2, device_id, xa_char, ya_char, za_char);
@@ -131,14 +132,14 @@ void runInsert() {
 
 void loop() {
   MYSQL_DISPLAY("Connecting to server");
- 
   if (conn.connectNonBlocking(server_addr, server_port, user, password) != RESULT_FAIL) {
-    digitalWrite(LED_BUILTIN, LOW);
     MYSQL_DISPLAY("\nConnect success");
 
-    // Obtain sensor data
+    // Obtain sensor data from ACS712
     mA_float = ACS.mA_AC();
     formFactor_float = ACS.getFormFactor();
+
+    // Obtain sensor data from ADXL345
     xyzFloat raw = myAcc.getCorrectedRawValues();    // Returns the corrected raw values from the data registers.
     xyzFloat g = myAcc.getGValues();        // Returns the g values.
 
@@ -151,6 +152,8 @@ void loop() {
     MYSQL_DISPLAY5("\nRaw-x = ", raw.x, "  |  Raw-y = ", raw.y, "  |  Raw-z = ", raw.z)
     MYSQL_DISPLAY5("g-x   = ", g.x, "  |  g-y   = ", g.y, "  |  g-z   = ", g.z)
     
+    digitalWrite(LED_BUILTIN, LOW);
+    
     runInsert();
     conn.close();
     digitalWrite(LED_BUILTIN, HIGH);
@@ -161,6 +164,6 @@ void loop() {
   }
 
   MYSQL_DISPLAY("\nSleeping");
-  delay(100);         // end of loop
-
+  delay(10000);         // Restart after 10 seconds
+  // End of loop
 }

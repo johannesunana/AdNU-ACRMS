@@ -1,0 +1,10 @@
+{
+    "files.associations": {
+        "functional": "cpp",
+        "memory": "cpp",
+        "algorithm": "cpp",
+        "xmemory": "cpp",
+        "new": "cpp",
+        "exception": "cpp"
+    }
+}

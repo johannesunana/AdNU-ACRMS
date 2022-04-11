@@ -83,12 +83,13 @@ void runInsert() {
   MySQL_Query query_mem = MySQL_Query(&conn);
 
   if (conn.connected()) {
-    // Save
+    // Convert floats to strings before insert
     dtostrf(temp_float, 4, 2, temp_char);
     dtostrf(hmd_float, 4, 2, hmd_char);
     dtostrf(vout, 4, 2, vout_char);
     dtostrf(vref, 4, 2, vref_char);
-    
+
+    // Insert char strings to placeholders in single query string
     #if USING_STORED_PROCEDURE
       sprintf(query1, CALL_TEMPHMD, database, proc1, device_id, temp_char, hmd_char);
       sprintf(query2, CALL_GAS, database, proc2, device_id, vout_char, vref_char);
@@ -123,25 +124,29 @@ void runInsert() {
 void loop() {
   MYSQL_DISPLAY("Connecting to server");
   if (conn.connectNonBlocking(server_addr, server_port, user, password) != RESULT_FAIL) {
-    digitalWrite(LED_BUILTIN, LOW);
     MYSQL_DISPLAY("\nConnect success");
     
-    // Obtain sensor data
+    // Obtain sensor data from SHT21
     temp_float = sht.getTemperature();
     hmd_float = sht.getHumidity();
     MYSQL_DISPLAY3("\nTemp: ", temp_float, "\tHumidity: ", hmd_float);
-  
+
+    // Obtain sensor data from FCM2630-C01
+    // Channel Y0 from 74HC4051 mux
     digitalWrite(S0, LOW);
     vout_float = analogRead(Z_pin);
     vout = (vout_float * vin) / 1023;
     MYSQL_DISPLAY0("VOut: ");
     MYSQL_DISPLAY0( vout);
-  
+
+    // Channel Y1 from 74HC4051 mux
     digitalWrite(S0, HIGH);
     vref_float = analogRead(Z_pin);
     vref = (vref_float * vin) / 1023;
     MYSQL_DISPLAY1("\tVRef: ", vref);
+    
     digitalWrite(S0, LOW);
+    digitalWrite(LED_BUILTIN, LOW);
     
     runInsert();
     conn.close();
@@ -152,5 +157,6 @@ void loop() {
     MYSQL_DISPLAY("\nConnect failed");
   }  
   MYSQL_DISPLAY("\nSleeping");
-  delay(100);         // end of loop
+  delay(10000);         // Restart after 10 seconds
+  // End of loop
 }
